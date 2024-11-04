@@ -431,7 +431,7 @@ def register_user(request, user_data: UserCreateSchema):
             )
 
             # Generate access token
-            access_token = AuthHandler.create_access_token(new_user)
+            access_token = AuthHandler.create_access_token(new_user, expiration_minutes=settings.JWT_EXPIRATION_TIME)
             
             return 201, {
                 'access_token': access_token,
@@ -502,8 +502,7 @@ def login_view(request, login_data: LoginSchema):
             )
 
         try:
-            # Generate access token
-            access_token = AuthHandler.create_access_token(user)
+            access_token = AuthHandler.create_access_token(user, expiration_minutes=settings.JWT_EXPIRATION_TIME)
             
             return 200, {
                 'access_token': access_token,
@@ -533,67 +532,22 @@ def login_view(request, login_data: LoginSchema):
             details={"error": str(e)}
         )
 
-@api_v1.post("/logout", response={ 200: dict, 400: ErrorSchema, 401: ErrorSchema, 500: ErrorSchema })
+@api_v1.post("/logout", response={200: dict, 400: ErrorSchema, 500: ErrorSchema})
 def logout_view(request):
     """Logout Endpoint"""
-    try:
-        # Extract Authorization header
-        auth_header = request.META.get('HTTP_AUTHORIZATION', '')
-        
-        # Validate Authorization header exists
-        if not auth_header:
-            return 401, ErrorSchema(
-                message="No authorization header found",
-                code="UNAUTHORIZED",
-                details={"header": "Authorization header is missing"}
-            )
-        
-        # Validate Bearer token format
-        if not auth_header.startswith('Bearer '):
-            return 400, ErrorSchema(
-                message="Invalid authorization format",
-                code="INVALID_AUTH_FORMAT",
-                details={"expected": "Bearer token", "received": auth_header[:10] + "..."}
-            )
-        
+    
+    auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+
+    if auth_header and auth_header.startswith('Bearer '):
+        token = auth_header.split(' ')[1]
+
         try:
-            # Extract token
-            token = auth_header.split(' ')[1]
-            
-            # Validate token is not empty
-            if not token:
-                return 400, ErrorSchema(
-                    message="Empty token provided",
-                    code="EMPTY_TOKEN",
-                    details={"authorization": auth_header}
-                )
-            
-            # Optional: Verify token is valid before blacklisting
-            try:
-                decoded_payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
-            except jwt.ExpiredSignatureError:
-                return 401, ErrorSchema(
-                    message="Token has expired",
-                    code="TOKEN_EXPIRED"
-                )
-            except jwt.InvalidTokenError:
-                return 401, ErrorSchema(
-                    message="Invalid token",
-                    code="INVALID_TOKEN"
-                )
-            
-            # Blacklist the token
+            jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
             try:
                 BlacklistedToken.objects.create(token=token)
                 logger.info(f"Token successfully blacklisted: {token[:10]}...")
-                return 200, {"message": "Successfully logged out"}
-            
             except IntegrityError:
-                return 400, ErrorSchema(
-                    message="Token already blacklisted",
-                    code="TOKEN_ALREADY_BLACKLISTED",
-                    details={"token": token[:10] + "..."}
-                )
+                logger.info(f"Token already blacklisted: {token[:10]}...")
             except Exception as e:
                 logger.error(f"Database error while blacklisting token: {str(e)}")
                 return 500, ErrorSchema(
@@ -601,21 +555,13 @@ def logout_view(request):
                     code="DB_ERROR",
                     details={"error": str(e)}
                 )
-                
-        except IndexError:
-            return 400, ErrorSchema(
-                message="Malformed authorization header",
-                code="MALFORMED_AUTH_HEADER",
-                details={"header": auth_header}
-            )
-            
-    except Exception as e:
-        logger.error(f"Unexpected error in logout: {str(e)}")
-        return 500, ErrorSchema(
-            message="Internal server error",
-            code="INTERNAL_ERROR",
-            details={"error": str(e)}
-        )
+        except jwt.ExpiredSignatureError:
+            logger.info("Token has expired, proceeding with logout")
+        except jwt.InvalidTokenError:
+            logger.info("Invalid token, proceeding with logout")
+
+    # Return success message regardless of token validity
+    return 200, {"message": "Successfully logged out"}
 
 @api_v1.get("/me", auth=BearerAuth(), response=UserResponseSchema)
 def get_current_user(request):
