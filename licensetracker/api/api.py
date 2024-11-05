@@ -16,18 +16,19 @@ from api.schemas import (
     DivisionSchema, GlAccountSchema, SoftwareToOperateSchema,
     HardwareToOperateSchema, ErrorSchema, ContactPersonOut, 
     ContactPersonIn, UserCreateSchema, LoginSchema, UserResponseSchema,
-    TokenSchema
+    TokenSchema, AnalyticsSchema
 )
-from datetime import datetime
+from datetime import datetime, timedelta
 from django.core.validators import validate_email
 from django.contrib.auth.hashers import make_password
 from api.auth import AuthHandler, BearerAuth
 from django.contrib.auth import logout
-from django.db.models import Q
+from django.db.models import Q, Sum, Avg, Count, F
 import logging
 from django.conf import settings
 import jwt
 from django.core.cache import cache
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -585,3 +586,94 @@ def get_current_user(request):
         "first_name": user.first_name,
         "last_name": user.last_name
     }
+
+@api_v1.get("analytics", auth=BearerAuth(), response=AnalyticsSchema)
+def get_analytics_data(request):
+    """
+    Fetch and aggregate analytics data for the software tracking application.
+    
+    Returns:
+    AnalyticsSchema: A schema containing the requested analytics metrics.
+    """
+    # Total spending
+    total_spending = Software.objects.aggregate(total_spending=Sum('software_annual_amount'))['total_spending'] or 0
+
+    # Average satisfaction
+    average_satisfaction = Comment.objects.aggregate(average_satisfaction=Avg('satisfaction_rate'))['average_satisfaction'] or 0
+
+    # Active and total software
+    active_software = Software.objects.filter(software_operational_status='A').count()
+    total_software = Software.objects.count()
+
+    # Software expiring soon (within 30 days)
+    expiring_soon = Software.objects.filter(software_expiration_date__lte=timezone.now() + timedelta(days=30)).count()
+
+    # Most expensive and cheapest software
+    most_expensive = (
+        Software.objects.order_by('-software_annual_amount')
+        .values('software_name', 'software_annual_amount')
+        .first()
+    )
+    cheapest = (
+        Software.objects.order_by('software_annual_amount')
+        .exclude(software_annual_amount__isnull=True)
+        .values('software_name', 'software_annual_amount')
+        .first()
+    )
+
+    # Average cost
+    average_cost = Software.objects.exclude(software_annual_amount__isnull=True).aggregate(
+        average_cost=Avg('software_annual_amount')
+    )['average_cost'] or 0
+    
+    if average_cost is not None:
+        average_cost = round(average_cost, 2) # Round average_cost to 2 decimal places
+    else:
+        average_cost = 0
+        
+    # Highest and lowest rated software
+    highest_rated = (
+        Comment.objects.values('software__software_name', 'satisfaction_rate')
+        .order_by('-satisfaction_rate')
+        .first()
+    )
+    lowest_rated = (
+        Comment.objects.values('software__software_name', 'satisfaction_rate')
+        .order_by('satisfaction_rate')
+        .first()
+    )
+
+    # Vendor information
+    vendor_stats = (
+        Software.objects.values('software_vendor__name')
+        .annotate(products=Count('software_vendor'))
+        .order_by('-products')
+    )
+    vendors = [
+        {"name": v["software_vendor__name"], "products": v["products"]}
+        for v in vendor_stats
+    ]
+
+    # Active and inactive licenses
+    active_licenses = Software.objects.filter(software_operational_status='A').aggregate(
+        active_licenses=Sum('software_number_of_licenses')
+    )['active_licenses'] or 0
+    inactive_licenses = Software.objects.filter(software_operational_status='I').aggregate(
+        inactive_licenses=Sum('software_number_of_licenses')
+    )['inactive_licenses'] or 0
+
+    return AnalyticsSchema(
+        totalSpending=total_spending,
+        averageSatisfaction=average_satisfaction,
+        activeSoftware=active_software,
+        totalSoftware=total_software,
+        expiringSoon=expiring_soon,
+        mostExpensive=most_expensive or {},
+        cheapest=cheapest or {},
+        averageCost=average_cost,
+        highestRated=highest_rated or {},
+        lowestRated=lowest_rated or {},
+        vendors=vendors,
+        activeLicenses=active_licenses,
+        inactiveLicenses=inactive_licenses
+    )

@@ -232,3 +232,17 @@ class TokenSchema(Schema):
     token_type: str = 'bearer'
     user: UserResponseSchema
     
+class AnalyticsSchema(Schema):
+    totalSpending: float
+    averageSatisfaction: float
+    activeSoftware: int
+    totalSoftware: int
+    expiringSoon: int
+    mostExpensive: dict
+    cheapest: dict
+    averageCost: float
+    highestRated: dict
+    lowestRated: dict
+    vendors: list
+    activeLicenses: int
+    inactiveLicenses: int

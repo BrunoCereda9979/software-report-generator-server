@@ -149,4 +149,3 @@ class BlacklistedToken(models.Model):
         indexes = [
             models.Index(fields=['token']),
         ]
-        
