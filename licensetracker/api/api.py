@@ -27,6 +27,7 @@ from django.db.models import Q
 import logging
 from django.conf import settings
 import jwt
+from django.core.cache import cache
 
 logger = logging.getLogger(__name__)
 
@@ -34,20 +35,30 @@ api_v1 = NinjaAPI(version="1.0.0", description="Software License Tracking Applic
 
 @api_v1.get("software", response=List[SoftwareSchema])
 def get_all_software(request):
-    return Software.objects.all()
+    cache_key = "all_software"
+    cache_expiry = settings.CACHE_TTL
+
+    software_list = cache.get(cache_key)
+   
+    if software_list is None:
+        # Query the database if data is not in cache
+        software_list = list(Software.objects.all())
+        # Cache the result
+        cache.set(cache_key, software_list, cache_expiry)
+
+    return software_list
 
 @api_v1.get("software/{id}", response=SoftwareSchema)
 def get_software_by_id(request, id: int):
     return get_object_or_404(Software, id=id)
 
-# Get all the comments for a Software
 @api_v1.get("software/{software_id}/comments/", response=List[CommentSchema])
 def get_comments_by_software_id(request, software_id: int = Path(...)):
     software = get_object_or_404(Software, id=software_id)
     comments = Comment.objects.filter(software_id=software_id)
     return comments
 
-@api_v1.post("software", response={201: SoftwareOut, 400: ErrorSchema, 500: ErrorSchema})
+@api_v1.post("software", auth=BearerAuth(), response={201: SoftwareOut, 400: ErrorSchema, 500: ErrorSchema})
 def add_new_software(request, data: SoftwareIn):
     operational_status = ''
     
@@ -116,7 +127,7 @@ def add_new_software(request, data: SoftwareIn):
             code="INTERNAL_SERVER_ERROR"
         )
 
-@api_v1.put("software/{id}", response={200: SoftwareOut, 400: ErrorSchema, 500: ErrorSchema})
+@api_v1.put("software/{id}", auth=BearerAuth(), response={200: SoftwareOut, 400: ErrorSchema, 500: ErrorSchema})
 def update_software(request, id: int, data: SoftwareUpdate):
     try:
         software = get_object_or_404(Software, id=id)
@@ -193,7 +204,7 @@ def update_software(request, id: int, data: SoftwareUpdate):
         )
         
 
-@api_v1.delete("software/{id}", response={204: None, 404: ErrorSchema})
+@api_v1.delete("software/{id}", auth=BearerAuth(), response={204: None, 404: ErrorSchema})
 def delete_software(request, id: int):
     software = get_object_or_404(Software, id=id)
     software.delete()
@@ -203,7 +214,7 @@ def delete_software(request, id: int):
 def get_all_contact_people(request):
     return ContactPerson.objects.all()
 
-@api_v1.post("contact-people/", response={201: ContactPersonOut, 400: ErrorSchema})
+@api_v1.post("contact-people/", auth=BearerAuth(), response={201: ContactPersonOut, 400: ErrorSchema})
 def add_new_contact_person(request, data: ContactPersonIn):
     new_contact = ContactPerson.objects.create(
         contact_name=data.contact_name,
@@ -227,7 +238,7 @@ def get_all_comments(request):
 def get_comment_by_id(request, id: int):
     return get_object_or_404(Comment, id=id)
 
-@api_v1.post("comments/", response={201: CommentOut, 404: ErrorSchema})
+@api_v1.post("comments/", auth=BearerAuth(), response={201: CommentOut, 404: ErrorSchema})
 def add_new_comment(request, new_comment: CommentIn):
     user = get_object_or_404(User, id=new_comment.user_id)
     software = get_object_or_404(Software, id=new_comment.software_id)
@@ -262,7 +273,7 @@ def add_new_comment(request, new_comment: CommentIn):
         updated_at=new_comment.updated_at
     )
 
-@api_v1.put("comments/{id}", response={200: CommentSchema, 404: ErrorSchema})
+@api_v1.put("comments/{id}", auth=BearerAuth(), response={200: CommentSchema, 404: ErrorSchema})
 def update_comment(request, id: int, data: CommentIn):
     comment = get_object_or_404(Comment, id=id)
     software = get_object_or_404(Software, id=data.software_id)
@@ -283,7 +294,7 @@ def partial_update_comment(request, id: int, data: CommentUpdate):
     
     return 200, comment
 
-@api_v1.delete("comments/{id}", response={200: CommentOut, 404: ErrorSchema})
+@api_v1.delete("comments/{id}", auth=BearerAuth(), response={200: CommentOut, 404: ErrorSchema})
 def delete_comment(request, id: int):
     comment = get_object_or_404(Comment, id=id)
     
@@ -299,7 +310,6 @@ def delete_comment(request, id: int):
     comment.delete()
     return 200, comment_data
 
-# Additional endpoints for other models (basic CRUD operations)
 @api_v1.get("departments/", response=List[DepartmentSchema])
 def get_all_departments(request):
     return Department.objects.all()
@@ -313,7 +323,7 @@ def get_all_vendors(request):
 def get_all_contact_persons(request):
     return ContactPerson.objects.all()
 
-@api_v1.post("contact-people", response={201: ContactPersonOut, 400: ErrorSchema})
+@api_v1.post("contact-people", auth=BearerAuth(), response={201: ContactPersonOut, 400: ErrorSchema})
 def add_new_contact_person(request, data: ContactPersonIn):
     new_contact = ContactPerson.objects.create(
         contact_name=data.contact_name,

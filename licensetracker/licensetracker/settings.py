@@ -190,3 +190,15 @@ LOGGING = {
         },
     },
 }
+
+# CACHE CONFIG
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
+    }
+}
+
+# Optional: Cache configuration constants
+CACHE_TTL = 60 * 60 * 24  # 24 hours in seconds
+CACHE_ENABLED = True
