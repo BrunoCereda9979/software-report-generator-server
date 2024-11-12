@@ -7,7 +7,7 @@ from api.models import BlacklistedToken
 
 class AuthHandler:
     @staticmethod
-    def create_access_token(user: User, expiration_minutes: int = 30) -> str:
+    def create_access_token(user: User, expiration_minutes: int = 1) -> str:
         """
         Create a JWT access token for a given user
         

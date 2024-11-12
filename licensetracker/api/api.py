@@ -204,7 +204,6 @@ def update_software(request, id: int, data: SoftwareUpdate):
             code="INTERNAL_SERVER_ERROR"
         )
         
-
 @api_v1.delete("software/{id}", auth=BearerAuth(), response={204: None, 404: ErrorSchema})
 def delete_software(request, id: int):
     software = get_object_or_404(Software, id=id)
@@ -215,21 +214,57 @@ def delete_software(request, id: int):
 def get_all_contact_people(request):
     return ContactPerson.objects.all()
 
-@api_v1.post("contact-people/", auth=BearerAuth(), response={201: ContactPersonOut, 400: ErrorSchema})
+@api_v1.post("contact-people/", auth=BearerAuth(), response={201: ContactPersonOut, 400: ErrorSchema, 409: ErrorSchema})
 def add_new_contact_person(request, data: ContactPersonIn):
-    new_contact = ContactPerson.objects.create(
-        contact_name=data.contact_name,
-        contact_lastname=data.contact_lastname,
-        contact_email=data.contact_email,
-        contact_phone_number=data.contact_phone_number
-    )
+    try:
+        # Validate input data
+        data.validate()
+        
+        # Clean input data
+        cleaned_data = {
+            'contact_name': data.contact_name.strip(),
+            'contact_lastname': data.contact_lastname.strip(),
+            'contact_email': data.contact_email.lower().strip(),
+            'contact_phone_number': data.contact_phone_number.strip()
+        }
+        
+        # Check for existing contact with same email
+        if ContactPerson.objects.filter(contact_email=cleaned_data['contact_email']).exists():
+            return 409, ErrorSchema(
+                message="Contact with this email already exists",
+                code="DUPLICATE_EMAIL",
+                details={
+                    "email": cleaned_data['contact_email']
+                }
+            )
 
-    return 201, ContactPersonOut(
-        contact_name=new_contact.contact_name,
-        contact_lastname=new_contact.contact_lastname,
-        contact_email=new_contact.contact_email,
-        contact_phone_number=new_contact.contact_phone_number
-    )
+        # Create new contact
+        new_contact = ContactPerson.objects.create(**cleaned_data)
+        new_contact.refresh_from_db()
+        
+        return 201, ContactPersonOut.from_orm(new_contact)
+
+    except ValidationError as e:
+        return 400, ErrorSchema(
+            message="Validation error",
+            code="VALIDATION_ERROR",
+            details=e.message_dict if hasattr(e, 'message_dict') else e.messages
+        )
+    
+    except IntegrityError as e:
+        return 400, ErrorSchema(
+            message="Database integrity error",
+            code="INTEGRITY_ERROR",
+            details={"db_error": str(e)}
+        )
+    
+    except Exception as e:
+        # Log the unexpected error here
+        return 400, ErrorSchema(
+            message="An unexpected error occurred",
+            code="INTERNAL_ERROR",
+            details={"error_type": e.__class__.__name__}
+        )
 
 @api_v1.get("comments/", response=List[CommentSchema])
 def get_all_comments(request):
@@ -600,7 +635,12 @@ def get_analytics_data(request):
 
     # Average satisfaction
     average_satisfaction = Comment.objects.aggregate(average_satisfaction=Avg('satisfaction_rate'))['average_satisfaction'] or 0
-
+    
+    if average_satisfaction is not None:
+        average_satisfaction = round(average_satisfaction, 2) # Round average_satisfaction to 2 decimal places
+    else:
+        average_satisfaction = 0
+        0
     # Active and total software
     active_software = Software.objects.filter(software_operational_status='A').count()
     total_software = Software.objects.count()
@@ -615,8 +655,9 @@ def get_analytics_data(request):
         .first()
     )
     cheapest = (
-        Software.objects.order_by('software_annual_amount')
-        .exclude(software_annual_amount__isnull=True)
+        Software.objects.exclude(software_annual_amount__isnull=True)
+        .exclude(software_annual_amount=0)
+        .order_by('software_annual_amount')
         .values('software_name', 'software_annual_amount')
         .first()
     )
@@ -630,7 +671,7 @@ def get_analytics_data(request):
         average_cost = round(average_cost, 2) # Round average_cost to 2 decimal places
     else:
         average_cost = 0
-        
+        0
     # Highest and lowest rated software
     highest_rated = (
         Comment.objects.values('software__software_name', 'satisfaction_rate')
