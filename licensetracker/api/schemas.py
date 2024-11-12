@@ -2,6 +2,9 @@ import uuid
 from ninja import Schema
 from typing import List, Optional
 from datetime import date, datetime
+from django.core.exceptions import ValidationError
+import re
+from typing import Optional, Dict
 
 class ErrorSchema(Schema):
     message: str
@@ -27,8 +30,34 @@ class ContactPersonSchema(Schema):
 class ContactPersonIn(Schema):
     contact_name: str
     contact_lastname: str
-    contact_email: str = None
-    contact_phone_number: Optional[int] = None
+    contact_email: str
+    contact_phone_number: str
+
+    @staticmethod
+    def validate_phone_number(phone: str) -> bool:
+        pattern = r'^\+?1?\d{9,15}$'
+        return bool(re.match(pattern, phone))
+    
+    def validate(self):
+        errors: Dict[str, str] = {}
+        
+        # Name validations
+        if len(self.contact_name.strip()) < 2:
+            errors['contact_name'] = "Must be at least 2 characters long"
+            
+        if len(self.contact_lastname.strip()) < 2:
+            errors['contact_lastname'] = "Must be at least 2 characters long"
+            
+        # Email validation
+        if not re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', self.contact_email):
+            errors['contact_email'] = "Invalid email format"
+            
+        # Phone validation
+        if not self.validate_phone_number(self.contact_phone_number):
+            errors['contact_phone_number'] = "Invalid phone number format"
+            
+        if errors:
+            raise ValidationError(errors)
 
 class ContactPersonOut(Schema):
     contact_name: str
@@ -95,6 +124,7 @@ class SoftwareSchema(Schema):
     software_to_operate: List[SoftwareToOperateSchema]
     hardware_to_operate: List[HardwareToOperateSchema]
     software_annual_amount: Optional[float]
+    software_annual_amount_detail: Optional[str] = None
     software_gl_accounts: List[GlAccountSchema]
     software_operational_status: str
     
@@ -129,6 +159,7 @@ class SoftwareIn(Schema):
     software_to_operate: List[SoftwareToOperateSchema]
     hardware_to_operate: List[HardwareToOperateSchema]
     software_annual_amount: Optional[float]
+    software_annual_amount_detail: Optional[str]
     software_gl_accounts: List[GlAccountSchema]
     software_operational_status: str
 
@@ -151,6 +182,7 @@ class SoftwareOut(Schema):
     software_to_operate: List[SoftwareToOperateSchema]
     hardware_to_operate: List[HardwareToOperateSchema]
     software_annual_amount: Optional[float]
+    software_annual_amount_detail: Optional[str]
     software_gl_accounts: List[GlAccountSchema]
     software_operational_status: str
 
@@ -173,6 +205,7 @@ class SoftwareUpdate(Schema):
     software_to_operate: List[SoftwareToOperateSchema]
     hardware_to_operate: List[HardwareToOperateSchema]
     software_annual_amount: Optional[float]
+    software_annual_amount_detail: Optional[str]
     software_gl_accounts: List[GlAccountSchema]
     software_operational_status: str
     

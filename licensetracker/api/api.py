@@ -62,7 +62,7 @@ def get_comments_by_software_id(request, software_id: int = Path(...)):
 @api_v1.post("software", auth=BearerAuth(), response={201: SoftwareOut, 400: ErrorSchema, 500: ErrorSchema})
 def add_new_software(request, data: SoftwareIn):
     operational_status = ''
-    
+    print(data)
     try:
         if data.software_operational_status == 'Active':
             operational_status = 'A'
@@ -82,6 +82,7 @@ def add_new_software(request, data: SoftwareIn):
             software_maintenance_support=data.software_maintenance_support,
             software_number_of_licenses=data.software_number_of_licenses,
             software_annual_amount=data.software_annual_amount,
+            software_annual_amount_detail = data.software_annual_amount_detail,
             software_operational_status=operational_status
         )
 
@@ -137,7 +138,8 @@ def update_software(request, id: int, data: SoftwareUpdate):
             'software_name', 'software_description', 'software_version',
             'software_years_of_use', 'software_is_hosted', 'software_is_tech_supported',
             'software_is_cloud_based', 'software_maintenance_support',
-            'software_number_of_licenses', 'software_annual_amount',
+            'software_number_of_licenses', 'software_annual_amount', 
+            'software_annual_amount_detail'
         ]
         
         for field in simple_fields:

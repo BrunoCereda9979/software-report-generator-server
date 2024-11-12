@@ -26,7 +26,7 @@ class Software(models.Model):
     
     id = models.AutoField(primary_key=True)
     software_name = models.CharField(max_length=255)
-    software_description = models.TextField()
+    software_description = models.TextField(max_length=500)
     software_department = models.ManyToManyField('Department', related_name='software_deparments')
     software_version = models.CharField(max_length=50, blank=True, default="1.0.0")
     software_years_of_use = models.PositiveIntegerField(null=True, default=1)
@@ -44,6 +44,7 @@ class Software(models.Model):
     software_to_operate = models.ManyToManyField('SoftwareToOperate', related_name='software_to_operate', blank=True)
     hardware_to_operate = models.ManyToManyField('HardwareToOperate', related_name='hardware_to_operate', blank=True)
     software_annual_amount = models.FloatField(null=True, blank=True, max_length=10)
+    software_annual_amount_detail = models.TextField(null=True, blank=True)
     software_gl_accounts = models.ManyToManyField('GlAccount', related_name="software_gl_accounts", blank=True)
 
     def __str__(self):
