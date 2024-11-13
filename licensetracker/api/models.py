@@ -19,6 +19,7 @@ class Software(models.Model):
     OPERATIONAL_STATUS_CHOICES = [
         ('A', 'Active'),
         ('I', 'Inactive'),
+        ('AU', 'Authorized'),
     ]
 
     def json_field_default():
@@ -32,7 +33,7 @@ class Software(models.Model):
     software_years_of_use = models.PositiveIntegerField(null=True, default=1)
     software_last_updated = models.DateField(null=True, blank=True)
     software_expiration_date = models.DateField(null=True, blank=True)
-    software_operational_status = models.CharField(max_length=1, choices=OPERATIONAL_STATUS_CHOICES, default='A')
+    software_operational_status = models.CharField(max_length=2, choices=OPERATIONAL_STATUS_CHOICES, default='A')
     software_is_hosted = models.CharField(max_length=3, choices=SOFTWARE_HOSTING_CHOICES, default="INT")
     software_is_tech_supported = models.CharField(max_length=3, choices=YES_NO_CHOICES, default="NO")
     software_is_cloud_based = models.CharField(max_length=3, choices=YES_NO_CHOICES, null=True, default="NO")

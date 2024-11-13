@@ -68,6 +68,8 @@ def add_new_software(request, data: SoftwareIn):
             operational_status = 'A'
         elif data.software_operational_status == 'Inactive':
             operational_status = 'I'
+        elif data.software_operational_status == 'Authorized':
+            operational_status = 'AU'
           
         newSoftware = Software.objects.create(
             software_name=data.software_name,
