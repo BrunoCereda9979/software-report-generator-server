@@ -23,7 +23,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-foxh%5=0@k27q+_hm*=c_l!j5)*0@%(v86x2uu(y#n5)a7x!3w'
 
 #JWT TOKEN EXPIRATION MINUTES
-JWT_EXPIRATION_TIME = 30
+JWT_EXPIRATION_TIME = 60
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -32,7 +32,6 @@ ALLOWED_HOSTS = []
 
 
 # Application definition
-
 INSTALLED_APPS = [
     'corsheaders',
     'django.contrib.admin',

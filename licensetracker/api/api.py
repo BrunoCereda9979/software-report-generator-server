@@ -62,7 +62,7 @@ def get_comments_by_software_id(request, software_id: int = Path(...)):
 @api_v1.post("software", auth=BearerAuth(), response={201: SoftwareOut, 400: ErrorSchema, 500: ErrorSchema})
 def add_new_software(request, data: SoftwareIn):
     operational_status = ''
-    print(data)
+    
     try:
         if data.software_operational_status == 'Active':
             operational_status = 'A'
@@ -157,6 +157,8 @@ def update_software(request, id: int, data: SoftwareUpdate):
             software.software_operational_status = 'A'
         elif data.software_operational_status == 'Inactive':
             software.software_operational_status = 'I'
+        elif data.software_operational_status == 'Authorized':
+            software.software_operational_status = 'AU'
         
         def extract_ids(objects):
             return [obj.id for obj in objects] if objects else []
@@ -263,7 +265,6 @@ def add_new_contact_person(request, data: ContactPersonIn):
         )
     
     except Exception as e:
-        # Log the unexpected error here
         return 400, ErrorSchema(
             message="An unexpected error occurred",
             code="INTERNAL_ERROR",
@@ -428,7 +429,6 @@ def register_user(request, user_data: UserCreateSchema):
         if not user_data.confirm_password or not user_data.confirm_password.strip():
             empty_fields["confirm_password"] = "Confirm password cannot be empty"
         
-        # First check for empty fields
         if empty_fields:
             return 400, ErrorSchema(
                 message="Fields cannot be empty",
