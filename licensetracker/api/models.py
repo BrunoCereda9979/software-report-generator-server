@@ -7,7 +7,6 @@ from django.utils import timezone
 from datetime import timedelta
 
 class Software(models.Model):
-    
     SOFTWARE_HOSTING_CHOICES = [
         ('INT', 'Internally'),
         ('EXT', 'Externally'),
@@ -44,10 +43,12 @@ class Software(models.Model):
     software_number_of_licenses = models.PositiveIntegerField(blank=True)
     software_to_operate = models.ManyToManyField('SoftwareToOperate', related_name='software_to_operate', blank=True)
     hardware_to_operate = models.ManyToManyField('HardwareToOperate', related_name='hardware_to_operate', blank=True)
-    software_annual_amount = models.FloatField(null=True, blank=True, max_length=10)
-    software_annual_amount_detail = models.TextField(null=True, blank=True)
+    software_monthly_cost = models.FloatField(null=True, blank=True, max_length=10)
+    software_cost_detail = models.TextField(null=True, blank=True)
     software_gl_accounts = models.ManyToManyField('GlAccount', related_name="software_gl_accounts", blank=True)
-
+    software_gasb_compliant = models.BooleanField('GASB Compliant', default=False, help_text='Indicates if the software complies with Governmental Accounting Standards Board requirements')
+    software_contract_number = models.CharField(max_length=255, null=True, blank=True)
+    
     def __str__(self):
         return self.software_name
 
@@ -151,3 +152,22 @@ class BlacklistedToken(models.Model):
         indexes = [
             models.Index(fields=['token']),
         ]
+        
+class Analytics(models.Model):
+    total_spending = models.FloatField()
+    
+class Contract(models.Model):
+    id = models.AutoField(primary_key=True)
+    software = models.ForeignKey('Software', on_delete=models.CASCADE, related_name='contracts')
+    name = models.CharField(max_length=255)
+    uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    size = models.CharField(max_length=20)
+    url = models.URLField()
+    contract_file = models.FileField(upload_to='contracts/')
+
+    def __str__(self):
+        return f"{self.name} - {self.software.software_name}"
+
+    class Meta:
+        ordering = ['-uploaded_at']

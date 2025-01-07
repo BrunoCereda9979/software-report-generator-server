@@ -1,5 +1,5 @@
 import uuid
-from ninja import Schema
+from ninja import Schema, UploadedFile
 from typing import List, Optional
 from datetime import date, datetime
 from django.core.exceptions import ValidationError
@@ -123,10 +123,13 @@ class SoftwareSchema(Schema):
     software_number_of_licenses: int
     software_to_operate: List[SoftwareToOperateSchema]
     hardware_to_operate: List[HardwareToOperateSchema]
-    software_annual_amount: Optional[float]
-    software_annual_amount_detail: Optional[str] = None
+    software_monthly_cost: Optional[float]
+    software_cost_detail: Optional[str] = None
     software_gl_accounts: List[GlAccountSchema]
     software_operational_status: str
+    software_gasb_compliant: bool
+    software_annual_cost: Optional[float]
+    software_contract_number: Optional[str]
     
     @staticmethod
     def resolve_software_last_updated(obj):
@@ -136,6 +139,12 @@ class SoftwareSchema(Schema):
     def resolve_software_expiration_date(obj):
         return obj.software_expiration_date.isoformat() if obj.software_expiration_date else None
 
+    @staticmethod
+    def resolve_software_annual_cost(obj):
+        if obj.software_monthly_cost:
+            return obj.software_monthly_cost * 12
+        return None
+    
 class SoftwareWithCommentsSchema(SoftwareSchema):
     software_comments: List[CommentSchema]
 
@@ -158,10 +167,12 @@ class SoftwareIn(Schema):
     software_number_of_licenses: int
     software_to_operate: List[SoftwareToOperateSchema]
     hardware_to_operate: List[HardwareToOperateSchema]
-    software_annual_amount: Optional[float]
-    software_annual_amount_detail: Optional[str]
+    software_monthly_cost: Optional[float]
+    software_cost_detail: Optional[str] = None
     software_gl_accounts: List[GlAccountSchema]
     software_operational_status: str
+    software_gasb_compliant: bool
+    software_contract_number: Optional[str]
 
 class SoftwareOut(Schema):
     software_name: str
@@ -181,11 +192,13 @@ class SoftwareOut(Schema):
     software_number_of_licenses: int
     software_to_operate: List[SoftwareToOperateSchema]
     hardware_to_operate: List[HardwareToOperateSchema]
-    software_annual_amount: Optional[float]
-    software_annual_amount_detail: Optional[str]
+    software_monthly_cost: Optional[float]
+    software_cost_detail: Optional[str] = None
     software_gl_accounts: List[GlAccountSchema]
     software_operational_status: str
-
+    software_gasb_compliant: bool
+    software_contract_number: Optional[str]
+    
 class SoftwareUpdate(Schema):
     software_name: str
     software_description: str
@@ -204,10 +217,12 @@ class SoftwareUpdate(Schema):
     software_number_of_licenses: int
     software_to_operate: List[SoftwareToOperateSchema]
     hardware_to_operate: List[HardwareToOperateSchema]
-    software_annual_amount: Optional[float]
-    software_annual_amount_detail: Optional[str]
+    software_monthly_cost: Optional[float]
+    software_cost_detail: Optional[str] = None
     software_gl_accounts: List[GlAccountSchema]
     software_operational_status: str
+    software_gasb_compliant: bool
+    software_contract_number: Optional[str]
     
     @classmethod
     def validate_software_last_updated(cls, value):
@@ -279,3 +294,25 @@ class AnalyticsSchema(Schema):
     vendors: list
     activeLicenses: int
     inactiveLicenses: int
+    
+class ContractOut(Schema):
+    software_id: int
+    name: str
+    uploaded_by: str
+    uploaded_at: datetime
+    size: str
+    url: str
+    contract_file: str
+    
+class ContractIn(Schema):
+    user_id: int 
+
+class ContractUpdate(Schema):
+    name: Optional[str] = None
+    url: Optional[str] = None
+    contract_file: Optional[UploadedFile] = None
+    
+class ContractResponse(Schema):
+    message: str
+    contract_url: str
+    code: int = 200

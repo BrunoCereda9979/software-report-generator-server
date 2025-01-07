@@ -1,13 +1,14 @@
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.shortcuts import get_object_or_404
-from ninja import NinjaAPI, Path
+from ninja import NinjaAPI, Path, File
+from ninja.files import UploadedFile
 from typing import List
 from django.db import IntegrityError
 from api.models import (
     Software, Comment, Department, Vendor,
     ContactPerson, Division, GlAccount, 
     SoftwareToOperate, HardwareToOperate, User,
-    BlacklistedToken
+    BlacklistedToken, Contract
 )
 from api.schemas import (
     SoftwareSchema, SoftwareIn, SoftwareOut, SoftwareUpdate,
@@ -16,7 +17,7 @@ from api.schemas import (
     DivisionSchema, GlAccountSchema, SoftwareToOperateSchema,
     HardwareToOperateSchema, ErrorSchema, ContactPersonOut, 
     ContactPersonIn, UserCreateSchema, LoginSchema, UserResponseSchema,
-    TokenSchema, AnalyticsSchema
+    TokenSchema, AnalyticsSchema, ContractResponse, ContractIn, ContractOut
 )
 from datetime import datetime, timedelta
 from django.core.validators import validate_email
@@ -29,6 +30,7 @@ from django.conf import settings
 import jwt
 from django.core.cache import cache
 from django.utils import timezone
+from django.http import FileResponse
 
 logger = logging.getLogger(__name__)
 
@@ -83,9 +85,11 @@ def add_new_software(request, data: SoftwareIn):
             software_is_cloud_based=data.software_is_cloud_based,
             software_maintenance_support=data.software_maintenance_support,
             software_number_of_licenses=data.software_number_of_licenses,
-            software_annual_amount=data.software_annual_amount,
-            software_annual_amount_detail = data.software_annual_amount_detail,
-            software_operational_status=operational_status
+            software_monthly_cost=data.software_monthly_cost,
+            software_cost_detail = data.software_cost_detail,
+            software_operational_status=operational_status,
+            software_gasb_compliant=data.software_gasb_compliant,
+            software_contract_number=data.software_contract_number
         )
 
         def extract_ids(objects):
@@ -131,6 +135,60 @@ def add_new_software(request, data: SoftwareIn):
             code="INTERNAL_SERVER_ERROR"
         )
 
+from ninja import File
+from ninja.files import UploadedFile
+
+from django.contrib.auth.models import User
+from ninja.errors import HttpError
+
+@api_v1.post("software/{software_id}/contract", response={200: ContractResponse, 400: ErrorSchema, 404: ErrorSchema})
+def upload_contract(request, software_id: int, user_id: int, file: UploadedFile = File(...)):
+    try:
+        user = User.objects.get(id=user_id)
+        software = Software.objects.get(id=software_id)
+        
+        if file.content_type != "application/pdf":
+            raise HttpError(400, "Only PDF files are allowed.")
+
+        contract = Contract(
+            software=software,
+            name=file.name,
+            uploaded_by=user,
+            size=f"{file.size / 1024 / 1024:.2f} MB",
+            contract_file=file
+        )
+        
+        contract.save()
+
+        # Refresh to get the file URL
+        contract.refresh_from_db()
+        absolute_url = request.build_absolute_uri(contract.contract_file.url)
+
+        return 200, ContractResponse(
+            message="Contract uploaded successfully",
+            contract_url=absolute_url,
+            uploaded_at=contract.uploaded_at,
+            code=200
+        )
+    except User.DoesNotExist:
+        raise HttpError(404, "User not found.")
+    except Software.DoesNotExist:
+        raise HttpError(404, "Software not found.")
+    except Exception as e:
+        raise HttpError(400, str(e))
+
+@api_v1.get("software/{software_id}/contract", response={200: None, 404: ErrorSchema})
+def get_contract(request, software_id: int):
+    try:
+        software = Software.objects.get(id=software_id)
+        if not software.software_contract_pdf:
+            return 404, ErrorSchema(message="No contract found", code="404")
+            
+        return FileResponse(software.software_contract_pdf.open(), content_type='application/pdf')
+    
+    except Software.DoesNotExist:
+        return 404, ErrorSchema(message="Software not found", code="404")
+
 @api_v1.put("software/{id}", auth=BearerAuth(), response={200: SoftwareOut, 400: ErrorSchema, 500: ErrorSchema})
 def update_software(request, id: int, data: SoftwareUpdate):
     try:
@@ -140,8 +198,8 @@ def update_software(request, id: int, data: SoftwareUpdate):
             'software_name', 'software_description', 'software_version',
             'software_years_of_use', 'software_is_hosted', 'software_is_tech_supported',
             'software_is_cloud_based', 'software_maintenance_support',
-            'software_number_of_licenses', 'software_annual_amount', 
-            'software_annual_amount_detail'
+            'software_number_of_licenses', 'software_monthly_cost', 
+            'software_cost_detail', 'software_gasb_compliant', 'software_contract_number'
         ]
         
         for field in simple_fields:
@@ -628,14 +686,8 @@ def get_current_user(request):
 
 @api_v1.get("analytics", auth=BearerAuth(), response=AnalyticsSchema)
 def get_analytics_data(request):
-    """
-    Fetch and aggregate analytics data for the software tracking application.
-    
-    Returns:
-    AnalyticsSchema: A schema containing the requested analytics metrics.
-    """
     # Total spending
-    total_spending = Software.objects.aggregate(total_spending=Sum('software_annual_amount'))['total_spending'] or 0
+    total_spending = Software.objects.aggregate(total_spending=Sum('software_monthly_cost'))['total_spending'] or 0
 
     # Average satisfaction
     average_satisfaction = Comment.objects.aggregate(average_satisfaction=Avg('satisfaction_rate'))['average_satisfaction'] or 0
@@ -654,21 +706,21 @@ def get_analytics_data(request):
 
     # Most expensive and cheapest software
     most_expensive = (
-        Software.objects.order_by('-software_annual_amount')
-        .values('software_name', 'software_annual_amount')
+        Software.objects.order_by('-software_monthly_cost')
+        .values('software_name', 'software_monthly_cost')
         .first()
     )
     cheapest = (
-        Software.objects.exclude(software_annual_amount__isnull=True)
-        .exclude(software_annual_amount=0)
-        .order_by('software_annual_amount')
-        .values('software_name', 'software_annual_amount')
+        Software.objects.exclude(software_monthly_cost__isnull=True)
+        .exclude(software_monthly_cost=0)
+        .order_by('software_monthly_cost')
+        .values('software_name', 'software_monthly_cost')
         .first()
     )
 
     # Average cost
-    average_cost = Software.objects.exclude(software_annual_amount__isnull=True).aggregate(
-        average_cost=Avg('software_annual_amount')
+    average_cost = Software.objects.exclude(software_monthly_cost__isnull=True).aggregate(
+        average_cost=Avg('software_monthly_cost')
     )['average_cost'] or 0
     
     if average_cost is not None:
