@@ -5,6 +5,8 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 from django.utils import timezone
 from datetime import timedelta
+from django.utils.text import slugify
+import os
 
 class Software(models.Model):
     SOFTWARE_HOSTING_CHOICES = [
@@ -155,16 +157,21 @@ class BlacklistedToken(models.Model):
         
 class Analytics(models.Model):
     total_spending = models.FloatField()
-    
+
+def contract_upload_to(instance, filename):
+    # Create a folder using the software's name, replacing spaces with underscores
+    folder_name = slugify(instance.software.id)
+    return os.path.join("contracts", folder_name, filename)
+
 class Contract(models.Model):
     id = models.AutoField(primary_key=True)
     software = models.ForeignKey('Software', on_delete=models.CASCADE, related_name='contracts')
     name = models.CharField(max_length=255)
+    contract_file = models.FileField(upload_to=contract_upload_to)
     uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)
     size = models.CharField(max_length=20)
     url = models.URLField()
-    contract_file = models.FileField(upload_to='contracts/')
 
     def __str__(self):
         return f"{self.name} - {self.software.software_name}"

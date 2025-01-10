@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -201,3 +202,12 @@ CACHES = {
 # Optional: Cache configuration constants
 CACHE_TTL = 60 * 60 * 24  # 24 hours in seconds
 CACHE_ENABLED = True
+
+# Media files configuration
+BASE_DIR = Path(__file__).resolve().parent.parent
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+CONTRACT_UPLOAD_PATH = 'contracts/'
+
+MAX_UPLOAD_SIZE = 5 * 1024 * 1024  # 5MB
+ALLOWED_UPLOAD_TYPES = ['application/pdf']

@@ -1,0 +1,4 @@
+.venv/
+media/
+licensetracker/api/__pycache__
+licensetracker/licensetracker/__pycache__

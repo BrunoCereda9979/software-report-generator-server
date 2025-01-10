@@ -294,25 +294,21 @@ class AnalyticsSchema(Schema):
     vendors: list
     activeLicenses: int
     inactiveLicenses: int
-    
+
 class ContractOut(Schema):
-    software_id: int
+    id: int
+    # software: SoftwareSchema
     name: str
-    uploaded_by: str
+    uploaded_by: Optional[str]
     uploaded_at: datetime
     size: str
     url: str
     contract_file: str
-    
-class ContractIn(Schema):
-    user_id: int 
 
-class ContractUpdate(Schema):
-    name: Optional[str] = None
-    url: Optional[str] = None
-    contract_file: Optional[UploadedFile] = None
-    
-class ContractResponse(Schema):
-    message: str
-    contract_url: str
-    code: int = 200
+    @staticmethod
+    def resolve_uploaded_by(obj):
+        return obj.uploaded_by.username if obj.uploaded_by else None
+
+    @staticmethod
+    def resolve_contract_file(obj):
+        return obj.contract_file.url if obj.contract_file else None

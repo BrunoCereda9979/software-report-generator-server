@@ -17,13 +17,12 @@ from api.schemas import (
     DivisionSchema, GlAccountSchema, SoftwareToOperateSchema,
     HardwareToOperateSchema, ErrorSchema, ContactPersonOut, 
     ContactPersonIn, UserCreateSchema, LoginSchema, UserResponseSchema,
-    TokenSchema, AnalyticsSchema, ContractResponse, ContractIn, ContractOut
+    TokenSchema, AnalyticsSchema, ContractOut
 )
 from datetime import datetime, timedelta
 from django.core.validators import validate_email
 from django.contrib.auth.hashers import make_password
 from api.auth import AuthHandler, BearerAuth
-from django.contrib.auth import logout
 from django.db.models import Q, Sum, Avg, Count, F
 import logging
 from django.conf import settings
@@ -31,6 +30,7 @@ import jwt
 from django.core.cache import cache
 from django.utils import timezone
 from django.http import FileResponse
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -135,59 +135,67 @@ def add_new_software(request, data: SoftwareIn):
             code="INTERNAL_SERVER_ERROR"
         )
 
-from ninja import File
-from ninja.files import UploadedFile
+import os
 
-from django.contrib.auth.models import User
-from ninja.errors import HttpError
+import os
 
-@api_v1.post("software/{software_id}/contract", response={200: ContractResponse, 400: ErrorSchema, 404: ErrorSchema})
-def upload_contract(request, software_id: int, user_id: int, file: UploadedFile = File(...)):
-    try:
-        user = User.objects.get(id=user_id)
-        software = Software.objects.get(id=software_id)
-        
-        if file.content_type != "application/pdf":
-            raise HttpError(400, "Only PDF files are allowed.")
-
-        contract = Contract(
-            software=software,
-            name=file.name,
-            uploaded_by=user,
-            size=f"{file.size / 1024 / 1024:.2f} MB",
-            contract_file=file
-        )
-        
-        contract.save()
-
-        # Refresh to get the file URL
-        contract.refresh_from_db()
-        absolute_url = request.build_absolute_uri(contract.contract_file.url)
-
-        return 200, ContractResponse(
-            message="Contract uploaded successfully",
-            contract_url=absolute_url,
-            uploaded_at=contract.uploaded_at,
-            code=200
-        )
-    except User.DoesNotExist:
-        raise HttpError(404, "User not found.")
-    except Software.DoesNotExist:
-        raise HttpError(404, "Software not found.")
-    except Exception as e:
-        raise HttpError(400, str(e))
-
-@api_v1.get("software/{software_id}/contract", response={200: None, 404: ErrorSchema})
-def get_contract(request, software_id: int):
-    try:
-        software = Software.objects.get(id=software_id)
-        if not software.software_contract_pdf:
-            return 404, ErrorSchema(message="No contract found", code="404")
-            
-        return FileResponse(software.software_contract_pdf.open(), content_type='application/pdf')
+@api_v1.post("/software/{software_id}/contracts", auth=BearerAuth(), response={201: ContractOut, 400: ErrorSchema})
+def upload_software_contract(request, software_id: int, file: UploadedFile = File(...)):
+    if not file.content_type == 'application/pdf':
+        return 400, ErrorSchema(message="Only PDF files are allowed")
     
-    except Software.DoesNotExist:
-        return 404, ErrorSchema(message="Software not found", code="404")
+    software = get_object_or_404(Software, id=software_id)
+
+    original_name = file.name
+    name, extension = os.path.splitext(original_name)
+    counter = 1
+
+    new_name = f"{name}{extension}"
+    while software.contracts.filter(name=new_name).exists():
+        new_name = f"{name}-{counter}{extension}"
+        counter += 1
+
+    size = f"{file.size / 1024:.2f} KB"
+    
+    try:
+        contract = Contract.objects.create(
+            software=software,
+            name=new_name,
+            contract_file=file,
+            uploaded_by=request.auth,
+            size=size,
+        )
+        return 201, contract
+    except Exception as e:
+        return 400, {"message": f"Failed to upload file: {str(e)}"}
+
+@api_v1.get("/contracts/{software_id}/", response=List[ContractOut])
+def list_contracts(request, software_id: int):
+    return Contract.objects.filter(software_id=software_id)
+
+from ninja import Schema
+
+class EmptyResponse(Schema):
+    pass
+
+@api_v1.delete("/contracts/{contract_id}", response={204: EmptyResponse, 400: ErrorSchema})
+def delete_contract(request, contract_id: int):
+    contract = get_object_or_404(Contract, id=contract_id)
+
+    try:
+        # Delete the physical file
+        if contract.contract_file and os.path.exists(contract.contract_file.path):
+            os.remove(contract.contract_file.path)
+
+        # Delete the database record
+        contract.delete()
+
+        return 204, None
+    except FileNotFoundError:
+        return 400, {"message": "The file does not exist on the server"}
+    except Exception as e:
+        return 400, {"message": f"Failed to delete contract: {str(e)}"}
+
 
 @api_v1.put("software/{id}", auth=BearerAuth(), response={200: SoftwareOut, 400: ErrorSchema, 500: ErrorSchema})
 def update_software(request, id: int, data: SoftwareUpdate):
