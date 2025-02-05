@@ -183,7 +183,7 @@ LOGGING = {
             'level': 'INFO',
             'propagate': False,
         },
-        'api': {  # Adjust to match your app name
+        'api': {
             'handlers': ['console'],
             'level': 'DEBUG',
             'propagate': True,

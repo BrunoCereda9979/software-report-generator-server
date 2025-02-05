@@ -10,18 +10,19 @@ class AuthHandler:
     def create_access_token(user: User, expiration_minutes: int = settings.JWT_EXPIRATION_TIME) -> str:
         """
         Create a JWT access token for a given user
-        
-        :param user: Django User instance
-        :param expiration_minutes: Optional expiration time in minutes (default is 30)
-        :return: JWT token string
         """
+        user_groups = list(user.groups.values_list('name', flat=True))
+        primary_role = user_groups[0] if user_groups else 'User'
         exp_time = datetime.now(timezone.utc) + timedelta(minutes=expiration_minutes)
+        
         payload = {
             'user_id': user.id,
             'username': user.username,
             'email': user.email,
             'first_name': user.first_name,
             'last_name': user.last_name,
+            'role': primary_role,
+            'groups': user_groups,
             'exp': exp_time
         }
         return jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")

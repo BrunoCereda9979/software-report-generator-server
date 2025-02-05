@@ -178,3 +178,4 @@ class Contract(models.Model):
 
     class Meta:
         ordering = ['-uploaded_at']
+        

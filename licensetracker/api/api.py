@@ -29,10 +29,48 @@ from django.conf import settings
 import jwt
 from django.core.cache import cache
 from django.utils import timezone
-from django.http import FileResponse
 import os
+from functools import wraps
+from django.contrib.auth.models import Group, Permission
+from django.http import HttpResponseForbidden
+from typing import List, Callable, Any
 
 logger = logging.getLogger(__name__)
+
+class GroupPermissionHandler:
+    @staticmethod
+    def required_groups(group_names: List[str]):
+        """Decorator to restrict access to specific user groups"""
+        def decorator(view_func: Callable):
+            @wraps(view_func)
+            def wrapper(request, *args, **kwargs):
+                # Validate authentication and group membership
+                if not request.auth:
+                    return HttpResponseForbidden("Authentication required")
+                
+                user_groups = request.auth.groups.values_list('name', flat=True)
+                
+                if not any(group in user_groups for group in group_names):
+                    return HttpResponseForbidden("Insufficient permissions")
+                
+                return view_func(request, *args, **kwargs)
+            return wrapper
+        return decorator
+
+    @staticmethod
+    def setup_groups_and_base_permissions():
+        """Create Admin and User groups with default permissions"""
+        admin_group, _ = Group.objects.get_or_create(name='Admin')
+        user_group, _ = Group.objects.get_or_create(name='User')
+
+        # Admin gets full permissions
+        admin_group.permissions.set(Permission.objects.all())
+
+        # User gets limited read/write permissions
+        user_read_perms = Permission.objects.filter(
+            codename__in=['view_software', 'view_comment', 'add_comment']
+        )
+        user_group.permissions.set(user_read_perms)
 
 api_v1 = NinjaAPI(version="1.0.0", description="Software License Tracking Application API for Rocky Mount City")
 
@@ -277,6 +315,7 @@ def update_software(request, id: int, data: SoftwareUpdate):
         )
         
 @api_v1.delete("software/{id}", auth=BearerAuth(), response={204: None, 404: ErrorSchema})
+@GroupPermissionHandler.required_groups(['Admin'])
 def delete_software(request, id: int):
     software = get_object_or_404(Software, id=id)
     software.delete()
