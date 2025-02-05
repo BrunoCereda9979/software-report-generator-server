@@ -541,7 +541,6 @@ def register_user(request, user_data: UserCreateSchema):
                 details=empty_fields
             )
 
-        # Validate password match
         if user_data.password != user_data.confirm_password:
             return 400, ErrorSchema(
                 message="Passwords do not match",
@@ -550,7 +549,6 @@ def register_user(request, user_data: UserCreateSchema):
             )
 
         try:
-            # Validate email format
             validate_email(user_data.email)
         except ValidationError:
             return 400, ErrorSchema(
@@ -559,7 +557,6 @@ def register_user(request, user_data: UserCreateSchema):
                 details={"email": "Email address is not valid"}
             )
 
-        # Check if username already exists
         if User.objects.filter(username=user_data.username).exists():
             return 400, ErrorSchema(
                 message="Username already exists",
@@ -567,7 +564,6 @@ def register_user(request, user_data: UserCreateSchema):
                 details={"username": "This username is already in use"}
             )
 
-        # Check if email already exists
         if User.objects.filter(email=user_data.email).exists():
             return 400, ErrorSchema(
                 message="Email already exists",
@@ -576,7 +572,6 @@ def register_user(request, user_data: UserCreateSchema):
             )
 
         try:
-            # Create new user
             new_user = User.objects.create(
                 username=user_data.username,
                 email=user_data.email,
@@ -584,8 +579,21 @@ def register_user(request, user_data: UserCreateSchema):
                 last_name=user_data.last_name,
                 password=make_password(user_data.password)
             )
+            
+            # Assign user to default group if not already in a group
+            try:
+                default_group = Group.objects.get(name='User')
+                
+                existing_groups = new_user.groups.all()
+                
+                if not existing_groups:
+                    new_user.groups.add(default_group)
+            
+            except Group.DoesNotExist:
+                logger.warning("Default 'User' group not found. No group assigned.")
+            except Exception as group_error:
+                logger.error(f"Error assigning default group: {str(group_error)}")
 
-            # Generate access token
             access_token = AuthHandler.create_access_token(new_user, expiration_minutes=settings.JWT_EXPIRATION_TIME)
             
             return 201, {
@@ -596,7 +604,8 @@ def register_user(request, user_data: UserCreateSchema):
                     'username': new_user.username,
                     'email': new_user.email,
                     'first_name': new_user.first_name,
-                    'last_name': new_user.last_name
+                    'last_name': new_user.last_name,
+                    'groups': [group.name for group in new_user.groups.all()]
                 }
             }
 
