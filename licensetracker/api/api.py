@@ -23,7 +23,7 @@ from datetime import datetime, timedelta
 from django.core.validators import validate_email
 from django.contrib.auth.hashers import make_password
 from api.auth import AuthHandler, BearerAuth
-from django.db.models import Q, Sum, Avg, Count, F
+from django.db.models import Q, Sum, Avg, Count
 import logging
 from django.conf import settings
 import jwt
