@@ -172,11 +172,7 @@ def add_new_software(request, data: SoftwareIn):
             message=f"An unexpected error occurred: {str(e)}",
             code="INTERNAL_SERVER_ERROR"
         )
-
-import os
-
-import os
-
+        
 @api_v1.post("/software/{software_id}/contracts", auth=BearerAuth(), response={201: ContractOut, 400: ErrorSchema})
 def upload_software_contract(request, software_id: int, file: UploadedFile = File(...)):
     if not file.content_type == 'application/pdf':
